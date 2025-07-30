@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/expert-app/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#3b82f6" />
+    <meta name="description" content="Advanced AI chat with conversation history and mobile support" />
+    
+    <!-- PWA -->
+    <link rel="manifest" href="/expert-app/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    
+    <title>AI Chat Assistant</title>
+    <script type="module" crossorigin src="/expert-app/assets/index-D2DArct8.js"></script>
+    <link rel="stylesheet" crossorigin href="/expert-app/assets/index-meS3bxXS.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Register service worker for PWA
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
