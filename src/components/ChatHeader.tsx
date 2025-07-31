@@ -11,7 +11,8 @@ import {
 import {
   SmartToy as BotIcon,
   LightMode as LightModeIcon,
-  DarkMode as DarkModeIcon
+  DarkMode as DarkModeIcon,
+  Settings as SettingsIcon
 } from '@mui/icons-material';
 import ModelSelector from './ModelSelector';
 import { useThemeMode } from '../contexts/ThemeContext';
@@ -22,13 +23,15 @@ interface ChatHeaderProps {
   selectedModelId: string;
   onModelSelect: (modelId: string) => void;
   isProcessing?: boolean;
+  onSettingsClick?: () => void;
 }
 
 const ChatHeader: React.FC<ChatHeaderProps> = ({
   models,
   selectedModelId,
   onModelSelect,
-  isProcessing = false
+  isProcessing = false,
+  onSettingsClick
 }) => {
   const { isDarkMode, toggleTheme } = useThemeMode();
 
@@ -85,6 +88,7 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
           onModelSelect={onModelSelect}
           disabled={isProcessing}
         />
+        
       </Toolbar>
     </AppBar>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -8,21 +8,17 @@ import {
   Fab,
   Typography,
   Stack,
-  Chip,
   Collapse,
-  Slider,
-  InputAdornment,
-  Tooltip,
-  FormControlLabel,
-  Switch
+  Button
 } from '@mui/material';
 import {
   Send as SendIcon,
-  Clear as ClearIcon,
-  Settings as SettingsIcon,
-  Psychology as PsychologyIcon
+  VpnKey as KeyIcon,
+  Lock as LockIcon,
+  Settings as SettingsIcon
 } from '@mui/icons-material';
 import type { AIModel, AIRequestConfig } from '../types';
+import { SettingsService } from '../services/SettingsService';
 
 interface ChatInputProps {
   input: string;
@@ -31,6 +27,7 @@ interface ChatInputProps {
   selectedModel: AIModel;
   isProcessing: boolean;
   isMobile: boolean;
+  onOpenSettings?: () => void;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -41,12 +38,20 @@ const ChatInput: React.FC<ChatInputProps> = ({
   isProcessing,
   isMobile
 }) => {
-  const [showSettings, setShowSettings] = useState(false);
-  const [maxTokens, setMaxTokens] = useState(2048);
-  const [temperature, setTemperature] = useState(0.7);
-  const [topP, setTopP] = useState(1);
-  const [systemPrompt, setSystemPrompt] = useState('');
-  const [enableWebSearch, setEnableWebSearch] = useState(false);
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [maxTokens] = useState(2048);
+  const [temperature] = useState(0.7);
+
+  useEffect(() => {
+    const checkApiKey = async () => {
+      const key = await SettingsService.getApiKey();
+      setHasApiKey(!!key);
+      setApiKey(key || '');
+    };
+    checkApiKey();
+  }, []);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -61,152 +66,63 @@ const ChatInput: React.FC<ChatInputProps> = ({
         model: selectedModel.id,
         maxTokens,
         temperature,
-        topP,
-        systemPrompt: systemPrompt.trim() || undefined,
-        enableWebSearch: selectedModel.id === 'deep-researcher' ? true : enableWebSearch
+        systemPrompt: undefined
       };
       onSend(input, config);
     }
   };
 
-  const resetSettings = () => {
-    setMaxTokens(2048);
-    setTemperature(0.7);
-    setTopP(1);
-    setSystemPrompt('');
-    setEnableWebSearch(false);
+  const handleSaveApiKey = async () => {
+    if (apiKey.trim()) {
+      await SettingsService.setApiKey(apiKey.trim());
+      setHasApiKey(true);
+      setShowApiKeyInput(false);
+    }
   };
 
   return (
     <Paper elevation={3} sx={{ bgcolor: 'background.paper' }}>
-      {/* Settings Panel */}
-      <Collapse in={showSettings}>
-        <Container maxWidth="md" sx={{ py: 2 }}>
+      {/* API Key Input - shown only when no key is configured */}
+      <Collapse in={showApiKeyInput && !hasApiKey}>
+        <Container maxWidth="md" sx={{ py: 2, px: 2 }}>
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-            <SettingsIcon sx={{ mr: 1 }} />
-            AI Configuration
+            <KeyIcon sx={{ mr: 1 }} />
+            Configure API Key
           </Typography>
           
-          <Stack spacing={3}>
-            {/* System Prompt */}
-            <TextField
-              fullWidth
-              multiline
-              rows={2}
-              label="System Prompt (Optional)"
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              placeholder="Provide instructions for how the AI should behave..."
+          <TextField
+            fullWidth
+            label="OpenRouter API Key"
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="Enter your OpenRouter API key..."
+            variant="outlined"
+            size="small"
+            sx={{ mb: 2 }}
+          />
+          
+          <Stack direction="row" spacing={1} justifyContent="flex-end">
+            <Button
               variant="outlined"
               size="small"
-            />
-            
-            {/* Web Search Toggle - only show for non-Deep Researcher models */}
-            {selectedModel.id !== 'deep-researcher' && (
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={enableWebSearch}
-                    onChange={(e) => setEnableWebSearch(e.target.checked)}
-                    color="primary"
-                  />
-                }
-                label="Enable Web Search"
-                sx={{ mt: 1 }}
-              />
-            )}
-            
-            {/* Deep Researcher Web Search Info */}
-            {selectedModel.id === 'deep-researcher' && (
-              <Box sx={{
-                mt: 1,
-                p: 2,
-                bgcolor: 'secondary.50',
-                borderRadius: 2,
-                border: 1,
-                borderColor: 'secondary.200'
-              }}>
-                <Typography variant="body2" color="secondary.main" sx={{ fontWeight: 500 }}>
-                  🔍 Web Search Enabled by Default
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Deep Researcher automatically uses web search for all models to provide current information.
-                </Typography>
-              </Box>
-            )}
-            
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 3 }}>
-              {/* Max Tokens */}
-              <Box>
-                <Typography gutterBottom variant="body2" fontWeight={500}>
-                  Max Tokens: {maxTokens}
-                </Typography>
-                <Slider
-                  value={maxTokens}
-                  onChange={(_, value) => setMaxTokens(value as number)}
-                  min={100}
-                  max={4096}
-                  step={100}
-                  marks={[
-                    { value: 512, label: '512' },
-                    { value: 2048, label: '2K' },
-                    { value: 4096, label: '4K' }
-                  ]}
-                  valueLabelDisplay="auto"
-                />
-              </Box>
-              
-              {/* Temperature */}
-              <Box>
-                <Typography gutterBottom variant="body2" fontWeight={500}>
-                  Temperature: {temperature}
-                </Typography>
-                <Slider
-                  value={temperature}
-                  onChange={(_, value) => setTemperature(value as number)}
-                  min={0}
-                  max={2}
-                  step={0.1}
-                  marks={[
-                    { value: 0, label: '0' },
-                    { value: 1, label: '1' },
-                    { value: 2, label: '2' }
-                  ]}
-                  valueLabelDisplay="auto"
-                />
-              </Box>
-              
-              {/* Top P */}
-              <Box>
-                <Typography gutterBottom variant="body2" fontWeight={500}>
-                  Top P: {topP}
-                </Typography>
-                <Slider
-                  value={topP}
-                  onChange={(_, value) => setTopP(value as number)}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  marks={[
-                    { value: 0, label: '0' },
-                    { value: 0.5, label: '0.5' },
-                    { value: 1, label: '1' }
-                  ]}
-                  valueLabelDisplay="auto"
-                />
-              </Box>
-            </Box>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <IconButton onClick={resetSettings} size="small">
-                <ClearIcon />
-              </IconButton>
-            </Box>
+              onClick={() => setShowApiKeyInput(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={handleSaveApiKey}
+              disabled={!apiKey.trim()}
+            >
+              Save Key
+            </Button>
           </Stack>
         </Container>
       </Collapse>
-      
-      {/* Input Area */}
+
+      {/* Input Area */} 
       <Container maxWidth="md" sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
           <TextField
@@ -219,78 +135,57 @@ const ChatInput: React.FC<ChatInputProps> = ({
             placeholder="Message Expert Assistant..."
             variant="outlined"
             disabled={isProcessing}
-            InputProps={{
-              endAdornment: input && (
-                <InputAdornment position="end">
-                  <IconButton
-                    onClick={() => onInputChange('')}
-                    edge="end"
-                    size="small"
-                  >
-                    <ClearIcon />
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
             sx={{
               '& .MuiOutlinedInput-root': {
                 bgcolor: 'background.default',
               }
             }}
           />
-          
-          <Tooltip title="AI Settings">
-            <IconButton
-              onClick={() => setShowSettings(!showSettings)}
-              color={showSettings ? 'primary' : 'default'}
-              disabled={isProcessing}
-            >
-              <SettingsIcon />
-            </IconButton>
-          </Tooltip>
-          
+           
+          <IconButton
+            onClick={() => setShowApiKeyInput(true)}
+            sx={{
+              color: 'text.secondary',
+              '&:hover': { color: 'primary.main' }
+            }}
+            title="Settings"
+          >
+            <SettingsIcon />
+          </IconButton>
+           
           <Fab
             color="primary"
             size={isMobile ? "medium" : "large"}
             onClick={handleSend}
             disabled={!input.trim() || isProcessing}
-            sx={{ ml: 1 }}
           >
             <SendIcon />
           </Fab>
         </Box>
-        
-        {/* Status Bar */}
-        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Stack direction="row" spacing={1} flexWrap="wrap">
-            <Chip 
-              icon={selectedModel.icon} 
-              label={selectedModel.name}
-              color={selectedModel.color as any}
+
+        {/* API Key Button - shown at bottom when no key is configured */}
+        <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center' }}>
+          {!hasApiKey && (
+            <Button
               variant="outlined"
               size="small"
-            />
-            {selectedModel.id === 'deep-researcher' && (
-              <Chip 
-                icon={<PsychologyIcon />}
-                label="Multi-Model Research"
-                color="secondary"
-                variant="outlined"
-                size="small"
-              />
-            )}
-            {showSettings && (
-              <Chip
-                label={`${maxTokens} tokens • T:${temperature} • P:${topP}${(selectedModel.id === 'deep-researcher' || enableWebSearch) ? ' • 🔍 Web' : ''}`}
-                variant="outlined"
-                size="small"
-                color="info"
-              />
-            )}
-          </Stack>
-          <Typography variant="caption" color="text.secondary">
-            Press Enter to send
-          </Typography>
+              startIcon={<KeyIcon />}
+              onClick={() => setShowApiKeyInput(true)}
+            >
+              Configure API Key
+            </Button>
+          )}
+          {hasApiKey && (
+            <Button
+              variant="text"
+              size="small"
+              startIcon={<LockIcon />}
+              onClick={() => setShowApiKeyInput(true)}
+              color="success"
+            >
+              API Key Configured
+            </Button>
+          )}
         </Box>
       </Container>
     </Paper>

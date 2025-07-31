@@ -46,3 +46,12 @@ export interface ChatConfig {
   defaultMaxTokens?: number;
   defaultTemperature?: number;
 }
+
+export interface Settings {
+  apiKey: string;
+  theme: 'light' | 'dark' | 'system';
+  maxTokens: number;
+  temperature: number;
+  enableRAG: boolean;
+  enableSummarization: boolean;
+}

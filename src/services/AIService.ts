@@ -1,4 +1,5 @@
 import type { AIRequestConfig, ChatConfig } from '../types';
+import { SettingsService } from './SettingsService';
 
 export class AIService {
   private config: ChatConfig;
@@ -46,10 +47,15 @@ export class AIService {
       stream: false
     };
 
+    const apiKey = SettingsService.getApiKey();
+    if (!apiKey) {
+      throw new Error('API key not configured. Please set your API key in settings.');
+    }
+
     const response = await fetch(this.config.baseUrl || 'https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': window.location.origin,
         'X-Title': 'Expert Assistant'
@@ -111,10 +117,15 @@ export class AIService {
       stream: true
     };
 
+    const apiKey = SettingsService.getApiKey();
+    if (!apiKey) {
+      throw new Error('API key not configured. Please set your API key in settings.');
+    }
+
     const response = await fetch(this.config.baseUrl || 'https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': window.location.origin,
         'X-Title': 'Expert Assistant'
