@@ -3,6 +3,7 @@ export interface Message {
   text: string;
   sender: 'user' | 'expert';
   timestamp: Date;
+  model?: string;
 }
 
 export interface ResearchProgress {

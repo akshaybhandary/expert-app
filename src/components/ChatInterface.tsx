@@ -294,7 +294,8 @@ const ChatInterface = () => {
           id: researchId,
           text: '🔬 **Deep Research Initiated**\n\nAssembling AI research consortium...',
           sender: 'expert',
-          timestamp: new Date()
+          timestamp: new Date(),
+          model: 'deep-researcher'
         };
         setMessages(prev => [...prev, researchMessage]);
 
@@ -322,7 +323,8 @@ const ChatInterface = () => {
               ...prev.slice(0, -1),
               {
                 ...lastMsg,
-                text: result
+                text: result,
+                model: 'deep-researcher'
               }
             ];
           }
@@ -363,7 +365,8 @@ const ChatInterface = () => {
           id: Date.now().toString(),
           text: response,
           sender: 'expert',
-          timestamp: new Date()
+          timestamp: new Date(),
+          model: selectedModelId
         };
         setMessages(prev => [...prev, assistantMessage]);
 
@@ -465,6 +468,7 @@ const ChatInterface = () => {
                     key={message.id}
                     message={message}
                     index={index}
+                    isDeepResearch={message.model === 'deep-researcher'}
                   />
                 ))}
                 <TypingIndicator show={isProcessing} message={typingMessage} />

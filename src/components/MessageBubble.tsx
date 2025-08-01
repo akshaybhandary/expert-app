@@ -14,14 +14,59 @@ import {
   SmartToy as BotIcon,
   Person as PersonIcon
 } from '@mui/icons-material';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+import { Button } from '@mui/material';
 import type { Message } from '../types';
 
 interface MessageBubbleProps {
   message: Message;
   index: number;
+  isDeepResearch?: boolean;
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message, index }) => {
+const MessageBubble: React.FC<MessageBubbleProps> = ({ message, index, isDeepResearch }) => {
+  const handleExportPdf = () => {
+    const doc = new jsPDF();
+
+    // Set title
+    doc.setFontSize(18);
+    doc.text('Deep Research Report', 14, 22);
+
+    // Set metadata
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
+
+    // Add a horizontal line
+    doc.setDrawColor(180);
+    doc.line(14, 35, 196, 35);
+
+    // Add content using autoTable for better text wrapping and formatting
+    const finalY = (doc as any).lastAutoTable.finalY || 45;
+    doc.autoTable({
+      startY: finalY,
+      html: `#markdown-content-${message.id}`,
+      theme: 'grid',
+      styles: {
+        fontSize: 10,
+        cellPadding: 2,
+      },
+      headStyles: {
+        fillColor: [41, 128, 185],
+        textColor: 255,
+        fontStyle: 'bold',
+      },
+      didParseCell: function(data) {
+        if (data.cell.section === 'body') {
+          // You can add more complex styling here if needed
+        }
+      }
+    });
+
+    doc.save(`deep-research-report-${message.id}.pdf`);
+  };
+
   return (
     <Slide direction="up" in timeout={300 + index * 100}>
       <Box>
@@ -37,7 +82,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, index }) => {
               </Typography>
               <Card elevation={1} sx={{ bgcolor: 'background.paper' }}>
                 <CardContent sx={{ '&:last-child': { pb: 2 } }}>
-                  <Box sx={{ 
+                  <Box id={`markdown-content-${message.id}`} sx={{
                     '& p': { mb: 1 },
                     '& h1, & h2, & h3, & h4, & h5, & h6': { 
                       mt: 2, 
@@ -116,6 +161,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, index }) => {
                     </ReactMarkdown>
                   </Box>
                 </CardContent>
+                {isDeepResearch && (
+                  <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={handleExportPdf}
+                    >
+                      Export as PDF
+                    </Button>
+                  </Box>
+                )}
               </Card>
             </Box>
           </Box>
