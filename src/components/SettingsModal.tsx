@@ -206,8 +206,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             <FormGroup>
               <FormControlLabel
                 control={
-                  <Switch 
-                    checked={tempSettings.enableRAG} 
+                  <Switch
+                    checked={tempSettings.enableRAG}
                     onChange={handleToggle('enableRAG')}
                   />
                 }
@@ -215,12 +215,35 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               />
               <FormControlLabel
                 control={
-                  <Switch 
-                    checked={tempSettings.enableSummarization} 
+                  <Switch
+                    checked={tempSettings.enableSummarization}
                     onChange={handleToggle('enableSummarization')}
                   />
                 }
                 label="Enable Conversation Summarization"
+              />
+            </FormGroup>
+          </Box>
+
+          {/* Web Search Settings */}
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Web Search
+            </Typography>
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!!tempSettings.enableWebSearch}
+                    onChange={(e) => {
+                      setTempSettings({
+                        ...tempSettings,
+                        enableWebSearch: e.target.checked
+                      });
+                    }}
+                  />
+                }
+                label="Enable Web Search"
               />
             </FormGroup>
           </Box>
@@ -241,7 +264,6 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         <Button 
           onClick={handleSave} 
           variant="contained"
-          disabled={!isApiKeyValid}
         >
           Save Settings
         </Button>

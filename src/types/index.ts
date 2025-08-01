@@ -54,4 +54,6 @@ export interface Settings {
   temperature: number;
   enableRAG: boolean;
   enableSummarization: boolean;
+  enableWebSearch: boolean;
+  defaultModel?: string;
 }

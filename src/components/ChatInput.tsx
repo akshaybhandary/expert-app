@@ -36,21 +36,46 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   selectedModel,
   isProcessing,
-  isMobile
+  isMobile,
+  onOpenSettings
 }) => {
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
-  const [maxTokens] = useState(2048);
-  const [temperature] = useState(0.7);
+  const [maxTokens, setMaxTokens] = useState(2048);
+  const [temperature, setTemperature] = useState(0.7);
 
   useEffect(() => {
-    const checkApiKey = async () => {
+    const load = async () => {
       const key = await SettingsService.getApiKey();
       setHasApiKey(!!key);
       setApiKey(key || '');
+      const s = SettingsService.getSettings();
+      if (typeof s.maxTokens === 'number') setMaxTokens(s.maxTokens);
+      if (typeof s.temperature === 'number') setTemperature(s.temperature);
     };
-    checkApiKey();
+    load();
+
+    // react to settings changes in same tab
+    const handler = () => {
+      const s = SettingsService.getSettings();
+      if (typeof s.maxTokens === 'number') setMaxTokens(s.maxTokens);
+      if (typeof s.temperature === 'number') setTemperature(s.temperature);
+    };
+    window.addEventListener('settings-updated', handler as EventListener);
+
+    // react to storage updates from other tabs
+    const storageHandler = (e: StorageEvent) => {
+      if (e.key === 'expert-app-settings') {
+        handler();
+      }
+    };
+    window.addEventListener('storage', storageHandler);
+
+    return () => {
+      window.removeEventListener('settings-updated', handler as EventListener);
+      window.removeEventListener('storage', storageHandler);
+    };
   }, []);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -143,7 +168,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           />
            
           <IconButton
-            onClick={() => setShowApiKeyInput(true)}
+            onClick={onOpenSettings}
             sx={{
               color: 'text.secondary',
               '&:hover': { color: 'primary.main' }
@@ -170,7 +195,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
               variant="outlined"
               size="small"
               startIcon={<KeyIcon />}
-              onClick={() => setShowApiKeyInput(true)}
+              onClick={onOpenSettings}
             >
               Configure API Key
             </Button>
@@ -180,7 +205,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
               variant="text"
               size="small"
               startIcon={<LockIcon />}
-              onClick={() => setShowApiKeyInput(true)}
+              onClick={onOpenSettings}
               color="success"
             >
               API Key Configured

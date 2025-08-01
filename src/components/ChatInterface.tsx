@@ -24,6 +24,8 @@ import MessageBubble from './MessageBubble';
 import WelcomeScreen from './WelcomeScreen';
 import TypingIndicator from './TypingIndicator';
 import ChatInput from './ChatInput';
+import SettingsModal from './SettingsModal';
+import ConversationList from './ConversationList';
 // RAGIndicator is not used in this component
 
 const ChatInterface = () => {
@@ -38,44 +40,44 @@ const ChatInterface = () => {
 
   // AI models configuration
   const models: AIModel[] = [
-    { 
-      name: 'Gemini 2.5', 
-      id: 'google/gemini-2.5-pro', 
+    {
+      name: 'Gemini 2.5',
+      id: 'google/gemini-2.5-pro',
       description: 'Google\'s latest multimodal AI',
       icon: <BotIcon />,
       color: 'primary'
     },
-    { 
-      name: 'Grok 4', 
-      id: 'x-ai/grok-4', 
+    {
+      name: 'Grok 4',
+      id: 'x-ai/grok-4',
       description: 'Anthropic\'s flagship model',
       icon: <BotIcon />,
       color: 'primary'
     },
-    { 
-      name: 'GPT-4 Turbo', 
-      id: 'openai/gpt-4-turbo', 
+    {
+      name: 'GPT-4o',
+      id: 'openai/gpt-4-turbo',
       description: 'OpenAI\'s most capable model',
       icon: <BotIcon />,
       color: 'primary'
     },
-    { 
-      name: 'Llama 3.1 70B', 
-      id: 'meta-llama/llama-3.1-70b-instruct', 
+    {
+      name: 'Llama 3.1 70B',
+      id: 'meta-llama/llama-3.1-70b-instruct',
       description: 'Meta\'s open-source powerhouse',
       icon: <BotIcon />,
       color: 'primary'
     },
-    { 
-      name: 'Mistral Large', 
-      id: 'mistralai/mistral-large', 
+    {
+      name: 'Mistral Large',
+      id: 'mistralai/mistral-large',
       description: 'European AI excellence',
       icon: <BotIcon />,
       color: 'primary'
     },
-    { 
-      name: 'Deep Researcher', 
-      id: 'deep-researcher', 
+    {
+      name: 'Deep Researcher',
+      id: 'deep-researcher',
       description: 'Multi-model research analysis',
       icon: <PsychologyIcon />,
       color: 'secondary'
@@ -83,6 +85,8 @@ const ChatInterface = () => {
   ];
 
   const [selectedModelId, setSelectedModelId] = useState(models[0].id);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [conversationListOpen, setConversationListOpen] = useState(false);
 
   // Initialize services
   const [apiKey, setApiKey] = useState('');
@@ -94,10 +98,11 @@ const ChatInterface = () => {
   // Initialize services when API key is available
   useEffect(() => {
     if (apiKey && apiKey.trim()) {
+      const currentSettings = SettingsService.getSettings();
       const service = new AIService({
         apiKey: apiKey,
-        defaultMaxTokens: 2048,
-        defaultTemperature: 0.7
+        defaultMaxTokens: currentSettings.maxTokens ?? 2048,
+        defaultTemperature: currentSettings.temperature ?? 0.7
       });
       setAiService(service);
       setDeepResearcher(new DeepResearcher(service));
@@ -109,44 +114,44 @@ const ChatInterface = () => {
 
   const getSelectedModel = () => models.find(m => m.id === selectedModelId) || models[0];
 
+  // Cache settings in state to avoid repeated synchronous localStorage reads
+  const [settingsState, setSettingsState] = useState(() => SettingsService.getSettings());
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Load conversation history and API key
+  // Load API key, selected model; do not hydrate RAG on mount (lazy for faster startup)
   useEffect(() => {
     const initializeApp = async () => {
-      // Load API key from settings
       const savedKey = await SettingsService.getApiKey();
       setApiKey(savedKey || '');
 
-      // Only load conversations if we have an API key
-      if (savedKey && savedKey.trim()) {
+      const s = SettingsService.getSettings();
+      setSettingsState(s);
+      if (s.defaultModel) {
+        setSelectedModelId(s.defaultModel);
+      }
+
+      // Only ensure there is a conversation ID; avoid heavy hydration at startup
+      if (savedKey && savedKey.trim() && !currentConversationId) {
         const conversations = conversationStorage.getAllConversations();
         const conversationIds = Object.keys(conversations);
-          
-        if (conversationIds.length > 0 && !currentConversationId) {
-          // Load the most recent conversation
+        if (conversationIds.length > 0) {
           const latestId = conversationIds[0];
-          const latestMessages = conversations[latestId];
           setCurrentConversationId(latestId);
-           
-          const convertedMessages: Message[] = latestMessages.map(msg => ({
+          const latestMessages = conversations[latestId] || [];
+          // Light render: map messages without any async RAG calls
+          const converted: Message[] = latestMessages.map(msg => ({
             id: msg.id,
             text: msg.text,
             sender: msg.sender,
             timestamp: new Date(msg.timestamp)
           }));
-          setMessages(convertedMessages);
-           
-          // Initialize RAG service
-          await ragService.initialize();
-           
-          // Add conversation history to RAG memory
-          for (const msg of latestMessages) {
-            await ragService.addMessage(msg.text, msg.sender, msg.id);
-          }
+          setMessages(converted);
+        } else {
+          createNewConversation();
         }
       }
     };
@@ -162,8 +167,11 @@ const ChatInterface = () => {
 
     // Listen for storage events (when settings are saved)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'openrouter_api_key') {
+      if (e.key === 'expert-app-settings') {
         handleApiKeyChange();
+        const s = SettingsService.getSettings();
+        setSettingsState(s);
+        if (s.defaultModel) setSelectedModelId(s.defaultModel);
       }
     };
 
@@ -174,50 +182,80 @@ const ChatInterface = () => {
     };
   }, []);
 
-  // Save conversation state
+  // Also listen to custom settings-updated events for same-tab updates
   useEffect(() => {
-    const saveConversation = async () => {
-      if (messages.length > 0 && currentConversationId) {
-        const storedMessages: ConversationMessage[] = messages.map(msg => ({
-          id: msg.id,
-          text: msg.text,
-          sender: msg.sender as 'user' | 'expert',
-          timestamp: new Date(msg.timestamp).getTime()
-        }));
-         
-        // Save each message individually
-        for (const msg of storedMessages) {
-          conversationStorage.saveMessage(currentConversationId, msg);
-        }
-        
-        // Update RAG service with new message
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage) {
-          await ragService.addMessage(lastMessage.text, lastMessage.sender as 'user' | 'expert', lastMessage.id);
-        }
+    const handler = () => {
+      const key = SettingsService.getApiKey();
+      setApiKey(key || '');
+      const s = SettingsService.getSettings();
+      setSettingsState(s);
+      if (s.defaultModel) setSelectedModelId(s.defaultModel);
+    };
+    window.addEventListener('settings-updated', handler);
+    return () => window.removeEventListener('settings-updated', handler);
+  }, []);
+
+  // Save conversation state (only persist the latest message change)
+  const lastSavedIdRef = useRef<string | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!currentConversationId || messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (!last || lastSavedIdRef.current === last.id) return;
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    saveTimerRef.current = window.setTimeout(async () => {
+      const toStore: ConversationMessage = {
+        id: last.id,
+        text: last.text,
+        sender: last.sender as 'user' | 'expert',
+        timestamp: new Date(last.timestamp).getTime()
+      };
+      conversationStorage.saveMessage(currentConversationId!, toStore);
+      lastSavedIdRef.current = last.id;
+
+      try {
+        await ragService.addMessage(last.text, last.sender as 'user' | 'expert', last.id);
+      } catch (e) {
+        console.warn('Failed adding latest message to RAG', e);
+      }
+    }, 300);
+
+    return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
       }
     };
-    
-    saveConversation();
-  }, [messages, currentConversationId, selectedModelId]);
+  }, [messages, currentConversationId]);
 
   // Create new conversation
-  // const createNewConversation = () => {
-  //   const newId = Date.now().toString();
-  //   setCurrentConversationId(newId);
-  //   setMessages([]);
-  // };
+  const createNewConversation = () => {
+    const newId = `conv_${Date.now()}`;
+    setCurrentConversationId(newId);
+    setMessages([]);
+    return newId;
+  };
 
   const handleSend = async (message: string, config: AIRequestConfig) => {
     if (!apiKey || !aiService) {
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        text: '⚠️ **API Key Required**\n\nTo use this application, you need to configure your OpenRouter API key:\n\n1. Click the settings icon in the header\n2. Enter your OpenRouter API key\n3. Save and try again\n\nGet your API key at: [OpenRouter](https://openrouter.ai/keys)',
-        sender: 'expert',
-        timestamp: new Date()
-      }]);
+      // Open settings instead of injecting message noise
+      setSettingsOpen(true);
       return;
     }
+
+    // Ensure we have a conversation ID
+    let conversationId = currentConversationId;
+    if (!conversationId) {
+      conversationId = createNewConversation();
+    }
+
+    // Compute effective model considering Web Search toggle (use cached settingsState)
+    const baseModel = selectedModelId;
+    const effectiveModel = settingsState.enableWebSearch ? `${baseModel}:online` : baseModel;
 
     // Add user message
     const newMessage: Message = {
@@ -229,6 +267,18 @@ const ChatInterface = () => {
     setMessages(prev => [...prev, newMessage]);
     setInput('');
     setIsProcessing(true);
+
+    // Add user message to RAG early for immediate context
+    try {
+      await ragService.addMessage(newMessage.text, 'user', newMessage.id);
+    } catch (e) {
+      console.warn('Failed adding user message to RAG', e);
+    }
+
+    // Override request config with effective model and settings defaults
+    config.model = effectiveModel;
+    if (settingsState.maxTokens) config.maxTokens = settingsState.maxTokens;
+    if (typeof settingsState.temperature === 'number') config.temperature = settingsState.temperature;
 
     try {
       if (selectedModelId === 'deep-researcher') {
@@ -316,6 +366,13 @@ const ChatInterface = () => {
           timestamp: new Date()
         };
         setMessages(prev => [...prev, assistantMessage]);
+
+        // Add assistant message to RAG memory to improve follow-ups
+        try {
+          await ragService.addMessage(assistantMessage.text, 'expert', assistantMessage.id);
+        } catch (e) {
+          console.warn('Failed adding assistant message to RAG', e);
+        }
       }
     } catch (error) {
       console.error('API error:', error);
@@ -336,6 +393,49 @@ const ChatInterface = () => {
     setSelectedModelId(modelId);
   };
 
+  const handleOpenSettings = () => {
+    setSettingsOpen(true);
+  };
+
+  const handleCloseSettings = () => {
+    setSettingsOpen(false);
+  };
+
+  const handleLoadConversation = async (conversationId: string) => {
+    try {
+      const conversations = conversationStorage.getAllConversations();
+      const conversationMessages = conversations[conversationId] || [];
+      setCurrentConversationId(conversationId);
+
+      // Defensive mapping
+      const convertedMessages: Message[] = (conversationMessages || []).map(msg => ({
+        id: msg.id ?? String(Date.now()),
+        text: msg.text ?? '',
+        sender: (msg.sender as 'user' | 'expert') ?? 'user',
+        timestamp: new Date(msg.timestamp ?? Date.now())
+      }));
+
+      setMessages(convertedMessages);
+
+      // Hydrate RAG memory with the whole conversation atomically
+      await ragService.rehydrateFromMessages(
+        (conversationMessages || []).map(m => ({
+          id: m.id,
+          text: m.text,
+          sender: m.sender
+        }))
+      );
+    } catch (e) {
+      console.error('Failed to load conversation', e);
+    }
+  };
+
+  const handleNewConversation = () => {
+    createNewConversation();
+    setMessages([]);
+    // Do not block UI; RAG will hydrate on demand when sending or loading
+  };
+
   const selectedModel = getSelectedModel();
 
   return (
@@ -348,6 +448,9 @@ const ChatInterface = () => {
           selectedModelId={selectedModelId}
           onModelSelect={handleModelSelect}
           isProcessing={isProcessing}
+          onNewConversation={handleNewConversation}
+          onSettingsClick={handleOpenSettings}
+          onOpenConversationList={() => setConversationListOpen(true)}
         />
 
         {/* Chat Messages */}
@@ -357,20 +460,14 @@ const ChatInterface = () => {
               <WelcomeScreen />
             ) : (
               <Stack spacing={3} sx={{ pb: 2 }}>
-                {messages.map((message, index) => (
+                {(messages.length > 120 ? messages.slice(-120) : messages).map((message, index) => (
                   <MessageBubble
                     key={message.id}
                     message={message}
                     index={index}
                   />
                 ))}
-                
-                {/* Typing Indicator */}
-                <TypingIndicator
-                  show={isProcessing}
-                  message={typingMessage}
-                />
-                
+                <TypingIndicator show={isProcessing} message={typingMessage} />
                 <div ref={messagesEndRef} />
               </Stack>
             )}
@@ -385,8 +482,35 @@ const ChatInterface = () => {
           selectedModel={selectedModel}
           isProcessing={isProcessing}
           isMobile={isMobile}
+          onOpenSettings={handleOpenSettings}
         />
       </Box>
+      
+      <SettingsModal
+        open={settingsOpen}
+        onClose={handleCloseSettings}
+      />
+      
+      <ConversationList
+        open={conversationListOpen}
+        onClose={() => setConversationListOpen(false)}
+        conversations={Object.entries(conversationStorage.getAllConversations()).map(([id, msgs]) => ({
+          id,
+          title: (msgs.find(m => m.sender === 'user')?.text || msgs[0]?.text || 'Untitled Chat').substring(0, 50),
+          lastMessage: msgs[msgs.length - 1]?.text || 'No messages yet',
+          timestamp: msgs[msgs.length - 1]?.timestamp || Date.now(),
+          messageCount: msgs.length
+        }))}
+        onSelectConversation={(id) => {
+          setConversationListOpen(false);
+          return handleLoadConversation(id);
+        }}
+        onNewConversation={() => {
+          setConversationListOpen(false);
+          handleNewConversation();
+        }}
+        currentConversationId={currentConversationId || undefined}
+      />
     </>
   );
 };

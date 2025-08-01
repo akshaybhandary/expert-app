@@ -7,7 +7,19 @@ export class SettingsService {
     const stored = localStorage.getItem(this.STORAGE_KEY);
     if (stored) {
       try {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored) as Partial<Settings>;
+        // Migrate older settings safely by applying defaults
+        const defaults = this.getDefaultSettings();
+        return {
+          apiKey: parsed.apiKey ?? defaults.apiKey,
+          theme: parsed.theme ?? defaults.theme,
+          maxTokens: parsed.maxTokens ?? defaults.maxTokens,
+          temperature: parsed.temperature ?? defaults.temperature,
+          enableRAG: parsed.enableRAG ?? defaults.enableRAG,
+          enableSummarization: parsed.enableSummarization ?? defaults.enableSummarization,
+          enableWebSearch: parsed.enableWebSearch ?? defaults.enableWebSearch,
+          defaultModel: parsed.defaultModel ?? defaults.defaultModel
+        };
       } catch {
         return this.getDefaultSettings();
       }
@@ -41,7 +53,9 @@ export class SettingsService {
       maxTokens: 2048,
       temperature: 0.7,
       enableRAG: true,
-      enableSummarization: true
+      enableSummarization: true,
+      enableWebSearch: false,
+      defaultModel: 'google/gemini-2.5-pro'
     };
   }
 }

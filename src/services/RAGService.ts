@@ -13,6 +13,9 @@ export class RAGService {
   private vectorStorage: VectorStorage;
   private maxContextTokens = 3000; // Conservative limit for mobile
   private avgTokensPerChar = 0.25; // Rough estimate
+  private initialized = false;
+
+  // Search parameters are defined inline in getRelevantContext for clarity
 
   constructor() {
     this.embeddingService = new EmbeddingService();
@@ -20,7 +23,9 @@ export class RAGService {
   }
 
   async initialize(): Promise<void> {
+    if (this.initialized) return;
     await this.embeddingService.initialize();
+    this.initialized = true;
   }
 
   async addMessage(text: string, sender: 'user' | 'expert', messageId: string): Promise<void> {
@@ -29,16 +34,19 @@ export class RAGService {
 
   async getRelevantContext(query: string): Promise<RAGContext> {
     try {
-      const relevantMessages = await this.vectorStorage.searchSimilar(query, 10, 0.3);
+      // Prefer fewer but stronger matches
+      const searchK = 6;
+      const searchMinScore = 0.35;
+      const relevantMessages = await this.vectorStorage.searchSimilar(query, searchK, searchMinScore);
       
-      // Calculate total tokens
+      // Calculate total tokens with overhead buffer
       let totalTokens = 0;
       const selectedMessages: SearchResult[] = [];
+      const budget = Math.max(0, Math.floor(this.maxContextTokens * 0.9) - 300); // reserve ~10% and 300 tokens overhead
       
       for (const result of relevantMessages) {
         const messageTokens = Math.ceil(result.document.text.length * this.avgTokensPerChar);
-        
-        if (totalTokens + messageTokens <= this.maxContextTokens) {
+        if (totalTokens + messageTokens <= Math.max(0, budget)) {
           selectedMessages.push(result);
           totalTokens += messageTokens;
         } else {
@@ -46,7 +54,7 @@ export class RAGService {
         }
       }
 
-      // If we have too much context, create a summary
+      // If nothing selected but results exist, fall back to summary
       let summary: string | undefined;
       if (selectedMessages.length === 0 && relevantMessages.length > 0) {
         summary = this.createSummary(relevantMessages);
@@ -74,6 +82,15 @@ export class RAGService {
 
   async clearMemory(): Promise<void> {
     this.vectorStorage.clear();
+  }
+
+  // One-shot hydration for loading a conversation
+  async rehydrateFromMessages(messages: Array<{ id: string; text: string; sender: 'user' | 'expert' }>): Promise<void> {
+    await this.initialize();
+    await this.vectorStorage.clear();
+    for (const m of messages) {
+      await this.vectorStorage.addDocument(m.text, m.sender, m.id);
+    }
   }
 
   getMemorySize(): number {
